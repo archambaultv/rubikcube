@@ -8,10 +8,13 @@ module Rubik
         Rotation(..),
         Move(..),
         move,
-        moves
+        moves,
+        repl
     ) where
 
 import Data.List (intercalate)
+import Control.Monad (unless)
+import System.IO (stdout, hFlush)
 
 -- A rubik cube is made of 6 faces, each one has 9 tiles. Each tile can have one
 -- of the six possible colors.
@@ -220,20 +223,31 @@ instance Show Move where
     show (Move c CWise) = show c
     show (Move c AntiCWise) = show c ++ "'"
 
+readMove :: String -> Maybe (Move, String)
+readMove ('W' : '\'' : xs)  = Just (Move White AntiCWise, xs)
+readMove ('W' : xs)  = Just (Move White CWise, xs)
+readMove ('R' : '\'' : xs)  = Just (Move Red AntiCWise, xs)
+readMove ('R' : xs)  = Just (Move Red CWise, xs)
+readMove ('B' : '\'' : xs)  = Just (Move Blue AntiCWise, xs)
+readMove ('B' : xs)  = Just (Move Blue CWise, xs)
+readMove ('Y' : '\'' : xs)  = Just (Move Yellow AntiCWise, xs)
+readMove ('Y' : xs)  = Just (Move Yellow CWise, xs)
+readMove ('O' : '\'' : xs)  = Just (Move Orange AntiCWise, xs)
+readMove ('O' : xs)  = Just (Move Orange CWise, xs)
+readMove ('G' : '\'' : xs)  = Just (Move Green AntiCWise, xs)
+readMove ('G' : xs)  = Just (Move Green CWise, xs)
+readMove _ = Nothing
+
+readMoves :: String -> Maybe [Move]
+readMoves s = do
+    (m, x) <- readMove s
+    fmap (m :) (if x == [] then return [] else readMoves x)
+
 instance Read Move where
-    readsPrec _ ('W' : '\'' : xs)  = [(Move White AntiCWise, xs)]
-    readsPrec _ ('W' : xs)  = [(Move White CWise, xs)]
-    readsPrec _ ('R' : '\'' : xs)  = [(Move Red AntiCWise, xs)]
-    readsPrec _ ('R' : xs)  = [(Move Red CWise, xs)]
-    readsPrec _ ('B' : '\'' : xs)  = [(Move Blue AntiCWise, xs)]
-    readsPrec _ ('B' : xs)  = [(Move Blue CWise, xs)]
-    readsPrec _ ('Y' : '\'' : xs)  = [(Move Yellow AntiCWise, xs)]
-    readsPrec _ ('Y' : xs)  = [(Move Yellow CWise, xs)]
-    readsPrec _ ('O' : '\'' : xs)  = [(Move Orange AntiCWise, xs)]
-    readsPrec _ ('O' : xs)  = [(Move Orange CWise, xs)]
-    readsPrec _ ('G' : '\'' : xs)  = [(Move Green AntiCWise, xs)]
-    readsPrec _ ('G' : xs)  = [(Move Green CWise, xs)]
-    readsPrec _ _ = []
+    readsPrec _ s = 
+        case readMove s of
+            Just (m, s') -> [(m, s')]
+            Nothing -> []
 
 -- Similar to a basic move, but can rotate anti clockwise
 move :: Move -> RubikCube -> RubikCube
@@ -244,3 +258,19 @@ move (Move c AntiCWise) rc = m $ m $ m rc
 -- Apply a series of move together
 moves :: [Move] -> RubikCube -> RubikCube
 moves ms rc = foldl (flip move) rc ms
+
+repl :: IO ()
+repl = myREPL solvedCube
+
+myREPL :: RubikCube -> IO ()
+myREPL rc = do
+    input <- read_
+    unless (input == ":quit" || input == ":q")
+        (case readMoves input of
+            Nothing -> putStrLn "Unable to parse" >> myREPL rc
+            Just mv -> 
+                let rc' = moves mv rc
+                in putStrLn (show rc') >> myREPL rc')
+
+    where read_ :: IO String
+          read_ = putStr "Moves> " >> hFlush stdout >> getLine

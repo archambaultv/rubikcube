@@ -1,6 +1,6 @@
 module Main (main) where
 
--- import Rubik
+import Rubik
 
 main :: IO ()
-main = return ()
+main = repl

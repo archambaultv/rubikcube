@@ -1,90 +1,107 @@
 module Rubik
     ( 
+        Color(..),
+        RubikCube(..),
+        RubikFace,
+        getFaces,
+        solvedCube
     ) where
 
-import Data.List (intercalate, splitAt)
+import Data.List (intercalate)
 
 -- A rubik cube is made of 6 faces, each one has 9 tiles. Each tile can have one
 -- of the six possible colors.
-data Color = Red | Blue | Yellow | Green | Orange | White
-    deriving (Eq)
+data Color = White | Red | Blue | Yellow | Orange | Green
+    deriving (Eq, Ord)
 
 instance Show Color where
+    show White = "W"
     show Red = "R"
     show Blue = "B"
     show Yellow = "Y"
-    show Green = "G"
     show Orange = "O"
-    show White = "W"
+    show Green = "G"
 
--- We name the faces from the point of view of the person solving the cube,
--- looking at it
-data Face = Front | Back | FRight | FLeft | Up | Down
-    deriving (Show, Eq)
+-- So that makes 54 tiles in total. But not all possible combination of colors
+-- are possible so we do not have 54^6 possible combinations. In fact the center
+-- tiles of each face are always in the same relative position so we can take
+-- advantage of that to define a coordinate system that is independant of how
+-- someone holds the rubik cude.
 
--- The easiest representation of a rubik cube is a list of length 54, for the 54
--- tiles.
-data RubikCube = RubikCube [Color]
+-- We simple define a rubik cube has the list of all 54 faces. The first 9 tiles
+-- are is the white face, the second the red face, third blue face and so on.
+data RubikCube = RubikCube [Color] -- A list of length 54
+                deriving (Eq)
 
--- We can assign each face a slot on the RubikCube list. The up face is the
--- first 9th color. Then the front face, down, back, left and right. By
--- definition we will consider the first element of the Front list to be the
--- upper left corner of this face. 
-face :: Face -> RubikCube -> [Color]
-face Front (RubikCube xs) = take 9 xs
-face Down (RubikCube xs) = take 9 $ drop 9 xs
-face Back (RubikCube xs) = take 9 $ drop 18 xs
-face Up (RubikCube xs) = take 9 $ drop 27 xs
-face FLeft (RubikCube xs) = take 9 $ drop 36 xs
-face FRight (RubikCube xs) = drop 45 xs
+type RubikFace = [Color] -- A list of length 9
+
+getFaces :: RubikCube -> (RubikFace, RubikFace, RubikFace, RubikFace, RubikFace, RubikFace)
+getFaces (RubikCube xs) = toTuple $ go xs
+    where go [] = []
+          go ys = take 9 ys : go (drop 9 ys)
+
+          toTuple [a,b,c,d,e,f] = (a,b,c,d,e,f)
+          toTuple _ = error "RubikCube wrong list size"
+
+-- Prints a rubik cube as a 2D projection
+-- as if white is the front face
+--         0 1 2
+--         3 R 5
+--         6 7 8
+-- 
+-- 0 1 2   0 1 2   0 1 2    
+-- 3 B 5   3 W 5   3 G 5
+-- 6 7 8   6 7 8   6 7 8
+-- 
+--         0 1 2
+--         3 O 5
+--         6 7 8
+-- 
+--         0 1 2
+--         3 Y 5
+--         6 7 8
+
+printRubikCube :: RubikCube -> String
+printRubikCube xs =
+    let (w,r,b,y,o,g) = getFaces xs
+        top :: [String]
+        top =  rubikFaceMatrix r
+        center :: [String]
+        center = concatMatrix 
+               $ map rubikFaceMatrix [b, w, g]
+        bottom1 :: [String]
+        bottom1 = rubikFaceMatrix o
+        bottom2 :: [String]
+        bottom2 = rubikFaceMatrix y
+    in
+        intercalate "\n\n" 
+        $ map (intercalate "\n") 
+        [pad top, center, pad bottom1, pad bottom2]
+    where
+        rubikFaceMatrix :: RubikFace -> [String]
+        rubikFaceMatrix u =
+            let colors = map show u
+                firstRow = take 3 colors
+                secondRow = take 3 $ drop 3 colors
+                thirdRow = drop 6 colors
+            in map (intercalate " ") $ [firstRow, secondRow, thirdRow]
+
+        concatMatrix :: [[String]] -> [String]
+        concatMatrix u  = [intercalate "  " $ map head u,
+                           intercalate "  " $ map (head . tail) u,
+                           intercalate "  " $ map last u]
+
+        pad :: [String] -> [String]
+        pad u = map ("       " ++) u
 
 instance Show RubikCube where
-    show c = intercalate "\n"
-             ["U : " ++ (show $ face Up c),
-              "F : " ++ (show $ face Front c),
-              "D : " ++ (show $ face Down c),
-              "B : " ++ (show $ face Back c),
-              "L : " ++ (show $ face FLeft c),
-              "R : " ++ (show $ face FRight c)]
-
+    show rc = printRubikCube rc
 
 -- The initial cube is well sorted
-defaultCube :: RubikCube
-defaultCube = RubikCube 
-            $ concatMap (\c -> replicate 9 c) [Red, White, Orange, Yellow, Blue, Green]
+solvedCube :: RubikCube
+solvedCube = RubikCube 
+            $ concatMap (\c -> replicate 9 c) [White, Red, Blue, Yellow, Orange, Green]
 
--- We can make moves to shuffle the rubik cube. This is actually a permutation
--- of the list of colors. There is 3 axis of rotation (clockwise -
--- anticlockwise, right - left, up - down) and each axis can move in two
--- directions. There is three "columns" that can move for each axis, so 18 moves
--- in total.
-data Move = FCw  -- Front face, clock wise
-          | FAcw -- Front face, anti clock wise
-          | MCw  -- Middle face, clock wise
-          | MCc  -- Middle face, anti clock wise
-          | BCw  -- Back face, clock wise
-          | BCc  -- Back face, anit clock wise
-
-          | RF   -- Right face, forward
-          | RB   -- Right face, backward
-          | MF   -- Middle face, forward
-          | MB   -- Middle face, backward
-          | LF   -- Left face, forward
-          | LB   -- Left face, backward
-
-          | UR   -- Up face, to the right
-          | UL   -- Up face, to the left
-          | MR   -- Middle face, to the right
-          | ML   -- Middle face, to the left
-          | DR   -- Down face, to the right
-          | DL   -- Down face, to the left
-
--- Now we can define how the moves affect the rubik cube. This will also define
--- the numbering for each face, considering that the first element of the Front
--- face list is the upper left corner.
-
--- Since moves are perumutation, it will be easier to define them if we have
--- some basic functions to handle permutation
 
 -- Swap two element of the list, the list must be long enough
 swap :: Int -> Int -> [a] -> [a]

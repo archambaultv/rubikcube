@@ -13,7 +13,6 @@ module Rubik
     ) where
 
 import Data.List (intercalate)
-import Control.Monad (unless)
 import System.IO (stdout, hFlush)
 
 -- A rubik cube is made of 6 faces, each one has 9 tiles. Each tile can have one
@@ -260,17 +259,43 @@ moves :: [Move] -> RubikCube -> RubikCube
 moves ms rc = foldl (flip move) rc ms
 
 repl :: IO ()
-repl = myREPL solvedCube
+repl = myREPL (ReplState solvedCube [])
 
-myREPL :: RubikCube -> IO ()
-myREPL rc = do
+data ReplState = ReplState {cube :: RubikCube, vars :: [(String, [Move])]}
+
+-- A small repl to play with the rubik cube
+myREPL :: ReplState -> IO ()
+myREPL st = do
     input <- read_
-    unless (input == ":quit" || input == ":q")
-        (case readMoves input of
-            Nothing -> putStrLn "Unable to parse" >> myREPL rc
-            Just mv -> 
-                let rc' = moves mv rc
-                in putStrLn (show rc') >> myREPL rc')
+    eval_ input
 
     where read_ :: IO String
           read_ = putStr "Moves> " >> hFlush stdout >> getLine
+
+          eval_ :: String -> IO ()
+          eval_ ":quit" = return ()
+          eval_ ":q" = eval_ ":quit"
+          eval_ ":restart" = myREPL st{cube = solvedCube}
+          eval_ ":r" = eval_ ":restart"
+          eval_ s | take 4 s == "let " = addVar (drop 4 s)
+          eval_ s =
+            case lookup s (vars st) of
+                Just mv -> mvCube mv
+                Nothing ->
+                    case readMoves s of
+                        Nothing -> putStrLn "Unable to parse" >> myREPL st
+                        Just mv -> 
+                            let rc = moves mv (cube st)
+                            in putStrLn (show rc) >> myREPL (st{cube = rc})
+
+          addVar :: String -> IO ()
+          addVar s =
+              let (name, s') = span (/= ' ') s
+                  xs = dropWhile (== ' ') $ drop 1 $ dropWhile (== ' ') s'
+              in case readMoves xs of
+                  Nothing -> putStrLn "Unable to parse" >> myREPL st
+                  Just mv -> myREPL st{vars = (name, mv) : vars st}
+
+          mvCube :: [Move] -> IO ()
+          mvCube mv = let rc = moves mv (cube st)
+                      in putStrLn (show rc) >> myREPL (st{cube = rc})

@@ -270,7 +270,7 @@ myREPL st = do
     eval_ input
 
     where read_ :: IO String
-          read_ = putStr "Moves> " >> hFlush stdout >> getLine
+          read_ = putStr "> " >> hFlush stdout >> getLine
 
           eval_ :: String -> IO ()
           eval_ ":quit" = return ()
